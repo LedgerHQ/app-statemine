@@ -34,14 +34,13 @@ const defaultOptions = {
   X11: false,
 }
 
+const expected_address = 'Cz4vu6J2NHP977ZYZcMCdjmmLgmddKvXRi5TxecuTgFfKww'
+const expected_pk = '121cc87d316d311fe3e3b9c34b1083a29c55f6ebd214b60f59578b0a37007424'
+
 jest.setTimeout(180000)
 
-beforeAll(async () => {
-  await Zemu.checkAndPullImage()
-})
-
 describe('SR25519', function () {
-  test('get address sr25519', async function () {
+  test.concurrent('get address sr25519', async function () {
     const sim = new Zemu(APP_PATH)
     try {
       await sim.start({ ...defaultOptions })
@@ -54,9 +53,6 @@ describe('SR25519', function () {
       expect(resp.return_code).toEqual(0x9000)
       expect(resp.error_message).toEqual('No errors')
 
-      const expected_address = 'Cz4vu6J2NHP977ZYZcMCdjmmLgmddKvXRi5TxecuTgFfKww'
-      const expected_pk = '121cc87d316d311fe3e3b9c34b1083a29c55f6ebd214b60f59578b0a37007424'
-
       expect(resp.address).toEqual(expected_address)
       expect(resp.pubKey).toEqual(expected_pk)
     } finally {
@@ -64,7 +60,7 @@ describe('SR25519', function () {
     }
   })
 
-  test('show address sr25519', async function () {
+  test.concurrent('show address sr25519', async function () {
     const sim = new Zemu(APP_PATH)
     try {
       await sim.start({ ...defaultOptions, model: 'nanos' })
@@ -81,9 +77,6 @@ describe('SR25519', function () {
       expect(resp.return_code).toEqual(0x9000)
       expect(resp.error_message).toEqual('No errors')
 
-      const expected_address = 'Cz4vu6J2NHP977ZYZcMCdjmmLgmddKvXRi5TxecuTgFfKww'
-      const expected_pk = '121cc87d316d311fe3e3b9c34b1083a29c55f6ebd214b60f59578b0a37007424'
-
       expect(resp.address).toEqual(expected_address)
       expect(resp.pubKey).toEqual(expected_pk)
     } finally {
@@ -91,7 +84,7 @@ describe('SR25519', function () {
     }
   })
 
-  test('show address - reject sr25519', async function () {
+  test.concurrent('show address - reject sr25519', async function () {
     const sim = new Zemu(APP_PATH)
     try {
       await sim.start({ ...defaultOptions })
@@ -112,7 +105,7 @@ describe('SR25519', function () {
     }
   })
 
-  test('sign basic normal', async function () {
+  test.concurrent('sign basic normal', async function () {
     const sim = new Zemu(APP_PATH)
     try {
       await sim.start({ ...defaultOptions })
@@ -146,14 +139,14 @@ describe('SR25519', function () {
         prehash = Buffer.from(blake2bFinal(context))
       }
       const signingcontext = Buffer.from([])
-      const valid = addon.schnorrkel_verify(pubKey, signingcontext, prehash, signatureResponse.signature.slice(1))
+      const valid = addon.schnorrkel_verify(pubKey, signingcontext, prehash, signatureResponse.signature.subarray(1))
       expect(valid).toEqual(true)
     } finally {
       await sim.close()
     }
   })
 
-  test('sign basic expert', async function () {
+  test.concurrent('sign basic expert', async function () {
     const sim = new Zemu(APP_PATH)
     try {
       await sim.start({ ...defaultOptions })
@@ -193,59 +186,7 @@ describe('SR25519', function () {
         prehash = Buffer.from(blake2bFinal(context))
       }
       const signingcontext = Buffer.from([])
-      const valid = addon.schnorrkel_verify(pubKey, signingcontext, prehash, signatureResponse.signature.slice(1))
-      expect(valid).toEqual(true)
-    } finally {
-      await sim.close()
-    }
-  })
-
-  test('sign basic expert - accept shortcut', async function () {
-    const sim = new Zemu(APP_PATH)
-    try {
-      await sim.start({ ...defaultOptions })
-      const app = newStatemineApp(sim.getTransport())
-      const pathAccount = 0x80000000
-      const pathChange = 0x80000000
-      const pathIndex = 0x80000000
-
-      // Change to expert mode so we can skip fields
-      await sim.clickRight()
-      await sim.clickBoth()
-      await sim.clickLeft()
-
-      const txBlob = Buffer.from(txBalances_transfer, 'hex')
-
-      const responseAddr = await app.getAddress(pathAccount, pathChange, pathIndex, false, 1)
-      const pubKey = Buffer.from(responseAddr.pubKey, 'hex')
-
-      // do not wait here.. we need to navigate
-      const signatureRequest = app.sign(pathAccount, pathChange, pathIndex, txBlob, 1)
-
-      // Wait until we are not in the main menu
-      await sim.waitUntilScreenIsNot(sim.getMainMenuSnapshot())
-
-      // Shortcut to accept menu
-      await sim.clickBoth()
-
-      // Accept tx
-      await sim.clickBoth()
-
-      const signatureResponse = await signatureRequest
-      console.log(signatureResponse)
-
-      expect(signatureResponse.return_code).toEqual(0x9000)
-      expect(signatureResponse.error_message).toEqual('No errors')
-
-      // Now verify the signature
-      let prehash = txBlob
-      if (txBlob.length > 256) {
-        const context = blake2bInit(32)
-        blake2bUpdate(context, txBlob)
-        prehash = Buffer.from(blake2bFinal(context))
-      }
-      const signingcontext = Buffer.from([])
-      const valid = addon.schnorrkel_verify(pubKey, signingcontext, prehash, signatureResponse.signature.slice(1))
+      const valid = addon.schnorrkel_verify(pubKey, signingcontext, prehash, signatureResponse.signature.subarray(1))
       expect(valid).toEqual(true)
     } finally {
       await sim.close()

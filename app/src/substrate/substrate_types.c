@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  (c) 2019 - 2022 Zondax AG
+ *  (c) 2019 - 2023 Zondax AG
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@
 #include "bignum.h"
 #include "coin.h"
 #include "parser_impl.h"
-
 #include "substrate_dispatch.h"
+#include "substrate_strings.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <zxformat.h>
@@ -112,6 +113,18 @@ parser_error_t _readCompactu128(parser_context_t* c, pd_Compactu128_t* v)
     return _readCompactInt(c, v);
 }
 
+parser_error_t _readu8_array_32(parser_context_t* c, pd_u8_array_32_t* v) {
+    GEN_DEF_READARRAY(32)
+}
+
+parser_error_t _readByFork(parser_context_t* c, pd_ByFork_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt64(c, &v->blockNumber))
+    CHECK_ERROR(_readu8_array_32(c, &v->blockHash))
+    return parser_ok;
+}
+
 parser_error_t _readBytes(parser_context_t* c, pd_Bytes_t* v)
 {
     CHECK_INPUT()
@@ -125,12 +138,761 @@ parser_error_t _readBytes(parser_context_t* c, pd_Bytes_t* v)
     return parser_ok;
 }
 
+parser_error_t _readFraction(parser_context_t* c, pd_Fraction_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readCompactu32(c, &v->nom))
+    CHECK_ERROR(_readCompactu32(c, &v->denom))
+    return parser_ok;
+}
+
+parser_error_t _readNetworkIdV3(parser_context_t* c, pd_NetworkIdV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // ByGenesis
+        CHECK_ERROR(_readu8_array_32(c, &v->byGenesis))
+        break;
+    case 1: // ByFork
+        CHECK_ERROR(_readByFork(c, &v->byFork))
+        break;
+    case 7: // Ethereum
+        CHECK_ERROR(_readCompactu64(c, &v->chainId))
+        break;
+    case 2: // Polkadot
+    case 3: // Kusama
+    case 4: // Westend
+    case 5: // Rococo
+    case 6: // Wococo
+    case 8: // BitcoinCore
+    case 9: // BitcoinCash
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readBodyIdV2(parser_context_t* c, pd_BodyIdV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Unit
+        break;
+    case 1: // Named
+        CHECK_ERROR(_readBytes(c, &v->named))
+        break;
+    case 2: // Index
+        CHECK_ERROR(_readCompactu32(c, &v->index))
+        break;
+    case 3: // Executive
+    case 4: // Technical
+    case 5: // Legislative
+    case 6: // Judicial
+    case 7: // Defense
+    case 8: // Administration
+    case 9: // Treasury
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readBodyIdV3(parser_context_t* c, pd_BodyIdV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Unit
+        break;
+    case 1: // Moniker
+        GEN_DEF_READARRAY(4)
+        break;
+    case 2: // Index
+        CHECK_ERROR(_readCompactu32(c, &v->index))
+        break;
+    case 3: // Executive
+    case 4: // Technical
+    case 5: // Legislative
+    case 6: // Judicial
+    case 7: // Defense
+    case 8: // Administration
+    case 9: // Treasury
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readBodyPart(parser_context_t* c, pd_BodyPart_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Voice
+        break;
+    case 1: // Members
+        CHECK_ERROR(_readCompactu32(c, &v->count))
+        break;
+    case 2: // Fraction
+    case 3: // AtleastProportion
+    case 4: // MoreThanProportion
+        CHECK_ERROR(_readFraction(c, &v->fraction))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readNetworkIdV2(parser_context_t* c, pd_NetworkIdV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Any
+    case 2: // Polkadot
+    case 3: // Kusama
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readBytes(c, &v->named))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
 parser_error_t _readu8_array_20(parser_context_t* c, pd_u8_array_20_t* v) {
     GEN_DEF_READARRAY(20)
 }
 
+parser_error_t _readAccountId32V2(parser_context_t* c, pd_AccountId32V2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readNetworkIdV2(c, &v->networkId))
+    CHECK_ERROR(_readu8_array_32(c, &v->key))
+    return parser_ok;
+}
+
+parser_error_t _readAccountId32V3(parser_context_t* c, pd_AccountId32V3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readOptionNetworkIdV3(c, &v->networkId))
+    CHECK_ERROR(_readu8_array_32(c, &v->key))
+    return parser_ok;
+}
+
+parser_error_t _readAccountIndex64V2(parser_context_t* c, pd_AccountIndex64V2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readNetworkIdV2(c, &v->networkId))
+    CHECK_ERROR(_readCompactu64(c, &v->index))
+    return parser_ok;
+}
+
+parser_error_t _readAccountIndex64V3(parser_context_t* c, pd_AccountIndex64V3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readOptionNetworkIdV3(c, &v->networkId))
+    CHECK_ERROR(_readCompactu64(c, &v->index))
+    return parser_ok;
+}
+
+parser_error_t _readAccountKey20V2(parser_context_t* c, pd_AccountKey20V2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readNetworkIdV2(c, &v->networkId))
+    CHECK_ERROR(_readu8_array_20(c, &v->key))
+    return parser_ok;
+}
+
+parser_error_t _readAccountKey20V3(parser_context_t* c, pd_AccountKey20V3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readOptionNetworkIdV3(c, &v->networkId))
+    CHECK_ERROR(_readu8_array_20(c, &v->key))
+    return parser_ok;
+}
+
+parser_error_t _readGeneralKeyV3(parser_context_t* c, pd_GeneralKeyV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->length))
+    CHECK_ERROR(_readu8_array_32(c, &v->data))
+    return parser_ok;
+}
+
+parser_error_t _readPluralityV2(parser_context_t* c, pd_PluralityV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readBodyIdV2(c, &v->id))
+    CHECK_ERROR(_readBodyPart(c, &v->part))
+    return parser_ok;
+}
+
+parser_error_t _readPluralityV3(parser_context_t* c, pd_PluralityV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readBodyIdV3(c, &v->id))
+    CHECK_ERROR(_readBodyPart(c, &v->part))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2(parser_context_t* c, pd_JunctionV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Parachain
+        CHECK_ERROR(_readCompactu32(c, &v->parachain))
+        break;
+    case 1: // AccountId32
+        CHECK_ERROR(_readAccountId32V2(c, &v->accountId32))
+        break;
+    case 2: // AccountIndex64
+        CHECK_ERROR(_readAccountIndex64V2(c, &v->accountIndex64))
+        break;
+    case 3: // AccountKey20
+        CHECK_ERROR(_readAccountKey20V2(c, &v->accountKey20))
+        break;
+    case 4: // PalletInstance
+        CHECK_ERROR(_readUInt8(c, &v->palletInstance))
+        break;
+    case 5: // GeneralIndex
+        CHECK_ERROR(_readCompactu128(c, &v->generalIndex))
+        break;
+    case 6: // GeneralKey
+        CHECK_ERROR(_readBytes(c, &v->generalKey))
+        break;
+    case 7: // OnlyChild
+        break;
+    case 8: // Plurality
+        CHECK_ERROR(_readPluralityV2(c, &v->plurality))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3(parser_context_t* c, pd_JunctionV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Parachain
+        CHECK_ERROR(_readCompactu32(c, &v->parachain))
+        break;
+    case 1: // AccountId32
+        CHECK_ERROR(_readAccountId32V3(c, &v->accountId32))
+        break;
+    case 2: // AccountIndex64
+        CHECK_ERROR(_readAccountIndex64V3(c, &v->accountIndex64))
+        break;
+    case 3: // AccountKey20
+        CHECK_ERROR(_readAccountKey20V3(c, &v->accountKey20))
+        break;
+    case 4: // PalletInstance
+        CHECK_ERROR(_readUInt8(c, &v->palletInstance))
+        break;
+    case 5: // GeneralIndex
+        CHECK_ERROR(_readCompactu128(c, &v->generalIndex))
+        break;
+    case 6: // GeneralKey
+        CHECK_ERROR(_readGeneralKeyV3(c, &v->generalKey))
+        break;
+    case 7: // OnlyChild
+        break;
+    case 8: // Plurality
+        CHECK_ERROR(_readPluralityV3(c, &v->plurality))
+        break;
+    case 9: // GlobalConsensus
+        CHECK_ERROR(_readNetworkIdV3(c, &v->globalConsensus))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X1(parser_context_t* c, pd_JunctionV2X1_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X2(parser_context_t* c, pd_JunctionV2X2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X3(parser_context_t* c, pd_JunctionV2X3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X4(parser_context_t* c, pd_JunctionV2X4_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction3))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X5(parser_context_t* c, pd_JunctionV2X5_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction4))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X6(parser_context_t* c, pd_JunctionV2X6_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction5))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X7(parser_context_t* c, pd_JunctionV2X7_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction5))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction6))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV2X8(parser_context_t* c, pd_JunctionV2X8_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV2(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction5))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction6))
+    CHECK_ERROR(_readJunctionV2(c, &v->junction7))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X1(parser_context_t* c, pd_JunctionV3X1_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X2(parser_context_t* c, pd_JunctionV3X2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X3(parser_context_t* c, pd_JunctionV3X3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X4(parser_context_t* c, pd_JunctionV3X4_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction3))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X5(parser_context_t* c, pd_JunctionV3X5_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction4))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X6(parser_context_t* c, pd_JunctionV3X6_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction5))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X7(parser_context_t* c, pd_JunctionV3X7_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction5))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction6))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionV3X8(parser_context_t* c, pd_JunctionV3X8_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readJunctionV3(c, &v->junction0))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction1))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction2))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction3))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction4))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction5))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction6))
+    CHECK_ERROR(_readJunctionV3(c, &v->junction7))
+    return parser_ok;
+}
+
+parser_error_t _readJunctionsV2(parser_context_t* c, pd_JunctionsV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Here
+        break;
+    case 1: // X1
+        CHECK_ERROR(_readJunctionV2X1(c, &v->x1))
+        break;
+    case 2: // X2
+        CHECK_ERROR(_readJunctionV2X2(c, &v->x2))
+        break;
+    case 3: // X3
+        CHECK_ERROR(_readJunctionV2X3(c, &v->x3))
+        break;
+    case 4: // X4
+        CHECK_ERROR(_readJunctionV2X4(c, &v->x4))
+        break;
+    case 5: // X5
+        CHECK_ERROR(_readJunctionV2X5(c, &v->x5))
+        break;
+    case 6: // X6
+        CHECK_ERROR(_readJunctionV2X6(c, &v->x6))
+        break;
+    case 7: // X7
+        CHECK_ERROR(_readJunctionV2X7(c, &v->x7))
+        break;
+    case 8: // X8
+        CHECK_ERROR(_readJunctionV2X8(c, &v->x8))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readJunctionsV3(parser_context_t* c, pd_JunctionsV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Here
+        break;
+    case 1: // X1
+        CHECK_ERROR(_readJunctionV3X1(c, &v->x1))
+        break;
+    case 2: // X2
+        CHECK_ERROR(_readJunctionV3X2(c, &v->x2))
+        break;
+    case 3: // X3
+        CHECK_ERROR(_readJunctionV3X3(c, &v->x3))
+        break;
+    case 4: // X4
+        CHECK_ERROR(_readJunctionV3X4(c, &v->x4))
+        break;
+    case 5: // X5
+        CHECK_ERROR(_readJunctionV3X5(c, &v->x5))
+        break;
+    case 6: // X6
+        CHECK_ERROR(_readJunctionV3X6(c, &v->x6))
+        break;
+    case 7: // X7
+        CHECK_ERROR(_readJunctionV3X7(c, &v->x7))
+        break;
+    case 8: // X8
+        CHECK_ERROR(_readJunctionV3X8(c, &v->x8))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readAssetInstanceV2(parser_context_t* c, pd_AssetInstanceV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Undefined
+        // Empty
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readCompactu128(c, &v->index))
+        break;
+    case 2: // array4
+        GEN_DEF_READARRAY(4)
+        break;
+    case 3: // array8
+        GEN_DEF_READARRAY(8)
+        break;
+    case 4: // array16
+        GEN_DEF_READARRAY(16)
+        break;
+    case 5: // array32
+        GEN_DEF_READARRAY(32)
+        break;
+    case 6: // blob
+        CHECK_ERROR(_readBytes(c, &v->blob))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readAssetInstanceV3(parser_context_t* c, pd_AssetInstanceV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Undefined
+        // Empty
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readCompactu128(c, &v->index))
+        break;
+    case 2: // array4
+        GEN_DEF_READARRAY(4)
+        break;
+    case 3: // array8
+        GEN_DEF_READARRAY(8)
+        break;
+    case 4: // array16
+        GEN_DEF_READARRAY(16)
+        break;
+    case 5: // array32
+        GEN_DEF_READARRAY(32)
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readMultiLocationV2(parser_context_t* c, pd_MultiLocationV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->parents))
+    CHECK_ERROR(_readJunctionsV2(c, &v->interior))
+    return parser_ok;
+}
+
+parser_error_t _readMultiLocationV3(parser_context_t* c, pd_MultiLocationV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->parents))
+    CHECK_ERROR(_readJunctionsV3(c, &v->interior))
+    return parser_ok;
+}
+
 parser_error_t _readBalance(parser_context_t* c, pd_Balance_t* v) {
     GEN_DEF_READARRAY(16)
+}
+
+parser_error_t _readFungibilityV2(parser_context_t* c, pd_FungibilityV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Undefined
+        CHECK_ERROR(_readCompactu128(c, &v->fungible))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readAssetInstanceV2(c, &v->nonFungible))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readFungibilityV3(parser_context_t* c, pd_FungibilityV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Undefined
+        CHECK_ERROR(_readCompactu128(c, &v->fungible))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readAssetInstanceV3(c, &v->nonFungible))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readMultiAssetIdV2(parser_context_t* c, pd_MultiAssetIdV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Concrete
+        CHECK_ERROR(_readMultiLocationV2(c, &v->concrete))
+        break;
+    case 1: // Abstract
+        CHECK_ERROR(_readBytes(c, &v->abstract))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readMultiAssetIdV3(parser_context_t* c, pd_MultiAssetIdV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Concrete
+        CHECK_ERROR(_readMultiLocationV3(c, &v->concrete))
+        break;
+    case 1: // Abstract
+        CHECK_ERROR(_readu8_array_32(c, &v->abstract))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readAccountId(parser_context_t* c, pd_AccountId_t* v) {
+    GEN_DEF_READARRAY(32)
+}
+
+parser_error_t _readCompactAccountIndex(parser_context_t* c, pd_CompactAccountIndex_t* v)
+{
+    return _readCompactInt(c, &v->value);
+}
+
+parser_error_t _readMintType(parser_context_t* c, pd_MintType_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Issuer
+    case 1: // Public
+        break;
+    case 2: // HolderOf
+        CHECK_ERROR(_readUInt32(c, &v->holderOf))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readMultiAssetV2(parser_context_t* c, pd_MultiAssetV2_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readMultiAssetIdV2(c, &v->assetId))
+    CHECK_ERROR(_readFungibilityV2(c, &v->fungibility))
+    return parser_ok;
+}
+
+parser_error_t _readMultiAssetV3(parser_context_t* c, pd_MultiAssetV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readMultiAssetIdV3(c, &v->assetId))
+    CHECK_ERROR(_readFungibilityV3(c, &v->fungibility))
+    return parser_ok;
+}
+
+parser_error_t _readPriceDirection(parser_context_t* c, pd_PriceDirection_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    if (v->value > 1) {
+        return parser_value_out_of_range;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readAccountIdLookupOfT(parser_context_t* c, pd_AccountIdLookupOfT_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Id
+        CHECK_ERROR(_readAccountId(c, &v->id))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_readCompactAccountIndex(c, &v->index))
+        break;
+    case 2: // Raw
+        CHECK_ERROR(_readBytes(c, &v->raw))
+        break;
+    case 3: // Address32
+        GEN_DEF_READARRAY(32)
+        break;
+    case 4: // Address20
+        GEN_DEF_READARRAY(20)
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
 }
 
 parser_error_t _readCall(parser_context_t* c, pd_Call_t* v)
@@ -149,6 +911,182 @@ parser_error_t _readCall(parser_context_t* c, pd_Call_t* v)
         v->nestCallIdx._nextPtr = c->tx_obj->nestCallIdx._nextPtr;
     }
     v->nestCallIdx.slotIdx = c->tx_obj->nestCallIdx.slotIdx;
+    return parser_ok;
+}
+
+parser_error_t _readChargeAssetIdOf(parser_context_t* c, pd_ChargeAssetIdOf_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readCollectionId(parser_context_t* c, pd_CollectionId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readCollectionSettings(parser_context_t* c, pd_CollectionSettings_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt64(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readItemId(parser_context_t* c, pd_ItemId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readItemPrice(parser_context_t* c, pd_ItemPrice_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readBalance(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readItemTipOfMaxTips(parser_context_t* c, pd_ItemTipOfMaxTips_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->collection))
+    CHECK_ERROR(_readUInt32(c, &v->item))
+    CHECK_ERROR(_readAccountId(c, &v->receiver))
+    CHECK_ERROR(_readBalance(c, &v->amount))
+    return parser_ok;
+}
+
+parser_error_t _readMintSettings(parser_context_t* c, pd_MintSettings_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readMintType(c, &v->mintType))
+    CHECK_ERROR(_readOptionBalance(c, &v->price))
+    CHECK_ERROR(_readOptionu32(c, &v->startBlock))
+    CHECK_ERROR(_readOptionu32(c, &v->endBlock))
+    CHECK_ERROR(_readUInt64(c, &v->defaultItemSettings))
+    return parser_ok;
+}
+
+parser_error_t _readMintWitnessItemId(parser_context_t* c, pd_MintWitnessItemId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->ownedItem))
+    return parser_ok;
+}
+
+parser_error_t _readPriceWithDirectionItemPrice(parser_context_t* c, pd_PriceWithDirectionItemPrice_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readBalance(c, &v->amount))
+    CHECK_ERROR(_readPriceDirection(c, &v->direction))
+    return parser_ok;
+}
+
+parser_error_t _readProxyType(parser_context_t* c, pd_ProxyType_t* v)
+{
+    CHECK_INPUT()
+
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    if (v->value > 6) {
+        return parser_value_out_of_range;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readTimepoint(parser_context_t* c, pd_Timepoint_t* v)
+{
+    CHECK_ERROR(_readBlockNumber(c, &v->height))
+    CHECK_ERROR(_readu32(c, &v->index))
+    return parser_ok;
+}
+
+parser_error_t _readWeight(parser_context_t* c, pd_Weight_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readCompactu64(c, &v->refTime))
+    CHECK_ERROR(_readCompactu64(c, &v->proofSize))
+    return parser_ok;
+}
+
+parser_error_t _readAssetIdParameter(parser_context_t* c, pd_AssetIdParameter_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readMultiLocationV3(c, &v->id));
+    return parser_ok;
+}
+
+parser_error_t _readAttributeNamespaceAccountId(parser_context_t* c, pd_AttributeNamespaceAccountId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Pallet
+    case 1: // CollectionOwner
+    case 2: // ItemOwner
+        break;
+    case 3: // Account
+        CHECK_ERROR(_readAccountId(c, &v->account))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readBoxVersionedMultiAssets(parser_context_t* c, pd_BoxVersionedMultiAssets_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 1: // V2
+        CHECK_ERROR(_readVecMultiAssetV2(c, &v->vecMultiassetV2))
+        break;
+    case 3: // V3
+        CHECK_ERROR(_readVecMultiAssetV3(c, &v->vecMultiassetV3))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readBoxVersionedMultiLocation(parser_context_t* c, pd_BoxVersionedMultiLocation_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 1: // V2
+        CHECK_ERROR(_readMultiLocationV2(c, &v->multilocationV2))
+        break;
+    case 3: // V3
+        CHECK_ERROR(_readMultiLocationV3(c, &v->multilocationV3))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _readCollectionConfigFor(parser_context_t* c, pd_CollectionConfigFor_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readCollectionSettings(c, &v->settings))
+    CHECK_ERROR(_readOptionu32(c, &v->maxSupply))
+    CHECK_ERROR(_readMintSettings(c, &v->mintSettings))
+    return parser_ok;
+}
+
+parser_error_t _readDestroyWitness(parser_context_t* c, pd_DestroyWitness_t* v)
+{
+    CHECK_ERROR(_readCompactu32(c, &v->accounts))
+    CHECK_ERROR(_readCompactu32(c, &v->sufficients))
+    CHECK_ERROR(_readCompactu32(c, &v->approvals))
     return parser_ok;
 }
 
@@ -179,6 +1117,37 @@ parser_error_t _readVecCall(parser_context_t* c, pd_VecCall_t* v)
     return parser_ok;
 }
 
+parser_error_t _readWeightLimit(parser_context_t* c, pd_WeightLimit_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->value))
+    switch (v->value) {
+    case 0: // Unlimited
+        break;
+    case 1: // Limited
+        CHECK_ERROR(_readWeight(c, &v->limited))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _readBoundedVecu8(parser_context_t* c, pd_BoundedVecu8_t* v) {
+    GEN_DEF_READVECTOR(u8)
+}
+
+parser_error_t _readCallHashOf(parser_context_t* c, pd_CallHashOf_t* v) {
+    GEN_DEF_READARRAY(32)
+}
+
+parser_error_t _readCancelAttributesApprovalWitness(parser_context_t* c, pd_CancelAttributesApprovalWitness_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt32(c, &v->accountAttributes))
+    return parser_ok;
+}
+
 parser_error_t _readH256(parser_context_t* c, pd_H256_t* v) {
     GEN_DEF_READARRAY(32)
 }
@@ -187,18 +1156,176 @@ parser_error_t _readHash(parser_context_t* c, pd_Hash_t* v) {
     GEN_DEF_READARRAY(32)
 }
 
+parser_error_t _readItemConfig(parser_context_t* c, pd_ItemConfig_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt64(c, &v->settings))
+    return parser_ok;
+}
+
+parser_error_t _readKeys(parser_context_t* c, pd_Keys_t* v) {
+    GEN_DEF_READARRAY(32)
+}
+
+parser_error_t _readOverweightIndex(parser_context_t* c, pd_OverweightIndex_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt64(c, &v->value))
+    return parser_ok;
+}
+
+parser_error_t _readVecMultiAssetV2(parser_context_t* c, pd_VecMultiAssetV2_t* v) {
+    GEN_DEF_READVECTOR(MultiAssetV2)
+}
+
+parser_error_t _readVecMultiAssetV3(parser_context_t* c, pd_VecMultiAssetV3_t* v) {
+    GEN_DEF_READVECTOR(MultiAssetV3)
+}
+
+parser_error_t _readVecItemTipOfMaxTips(parser_context_t* c, pd_VecItemTipOfMaxTips_t* v) {
+    GEN_DEF_READVECTOR(ItemTipOfMaxTips)
+}
+
+parser_error_t _readVecAccountId(parser_context_t* c, pd_VecAccountId_t* v) {
+    GEN_DEF_READVECTOR(AccountId)
+}
+
+parser_error_t _readVecItemId(parser_context_t* c, pd_VecItemId_t* v) {
+    GEN_DEF_READVECTOR(ItemId)
+}
+
+parser_error_t _readVecu8(parser_context_t* c, pd_Vecu8_t* v) {
+    GEN_DEF_READVECTOR(u8)
+}
+
+parser_error_t _readOptionNetworkIdV3(parser_context_t* c, pd_OptionNetworkIdV3_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readNetworkIdV3(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionBalance(parser_context_t* c, pd_OptionBalance_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readBalance(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionu32(parser_context_t* c, pd_Optionu32_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readu32(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionAccountIdLookupOfT(parser_context_t* c, pd_OptionAccountIdLookupOfT_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readAccountIdLookupOfT(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionItemPrice(parser_context_t* c, pd_OptionItemPrice_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readItemPrice(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionPriceWithDirectionItemPrice(parser_context_t* c, pd_OptionPriceWithDirectionItemPrice_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readPriceWithDirectionItemPrice(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionTimepoint(parser_context_t* c, pd_OptionTimepoint_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readTimepoint(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionAccountId(parser_context_t* c, pd_OptionAccountId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readAccountId(c, &v->contained))
+    }
+    return parser_ok;
+}
+
 parser_error_t _readOptionChargeAssetIdOf(parser_context_t* c, pd_OptionChargeAssetIdOf_t* v)
 {
     CHECK_INPUT()
     CHECK_ERROR(_readUInt8(c, &v->some))
     if (v->some > 0) {
-        CHECK_ERROR(_readu32(c, &v->value))
+        CHECK_ERROR(_readChargeAssetIdOf(c, &v->contained))
     }
     return parser_ok;
 }
 
-parser_error_t _readVecu8(parser_context_t* c, pd_Vecu8_t* v) {
-    GEN_DEF_READVECTOR(u8)
+parser_error_t _readOptionCollectionId(parser_context_t* c, pd_OptionCollectionId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readCollectionId(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionItemId(parser_context_t* c, pd_OptionItemId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readItemId(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionMintWitnessItemId(parser_context_t* c, pd_OptionMintWitnessItemId_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readMintWitnessItemId(c, &v->contained))
+    }
+    return parser_ok;
+}
+
+parser_error_t _readOptionProxyType(parser_context_t* c, pd_OptionProxyType_t* v)
+{
+    CHECK_INPUT()
+    CHECK_ERROR(_readUInt8(c, &v->some))
+    if (v->some > 0) {
+        CHECK_ERROR(_readProxyType(c, &v->contained))
+    }
+    return parser_ok;
 }
 
 ///////////////////////////////////
@@ -213,6 +1340,7 @@ parser_error_t _toStringbool(
     uint8_t* pageCount)
 {
     CLEAN_AND_CHECK()
+    UNUSED(pageIdx);
 
     *pageCount = 1;
     switch (*v) {
@@ -331,6 +1459,52 @@ parser_error_t _toStringCompactu128(
     return _toStringCompactInt(v, 0, false, "", "", outValue, outValueLen, pageIdx, pageCount);
 }
 
+parser_error_t _toStringu8_array_32(
+    const pd_u8_array_32_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount) {
+    GEN_DEF_TOSTRING_ARRAY(32)
+}
+
+parser_error_t _toStringByFork(
+    const pd_ByFork_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringu64(&v->blockNumber, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_32(&v->blockHash, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringu64(&v->blockNumber, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_32(&v->blockHash, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
 parser_error_t _toStringBytes(
     const pd_Bytes_t* v,
     char* outValue,
@@ -341,6 +1515,242 @@ parser_error_t _toStringBytes(
     GEN_DEF_TOSTRING_ARRAY(v->_len);
 }
 
+parser_error_t _toStringFraction(
+    const pd_Fraction_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringCompactu32(&v->nom, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringCompactu32(&v->denom, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringCompactu32(&v->nom, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringCompactu32(&v->denom, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringNetworkIdV3(
+    const pd_NetworkIdV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // ByGenesis
+        CHECK_ERROR(_toStringu8_array_32(&v->byGenesis, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // ByFork
+        CHECK_ERROR(_toStringByFork(&v->byFork, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 7: // Ethereum
+        CHECK_ERROR(_toStringCompactu64(&v->chainId, outValue, outValueLen, pageIdx, pageCount))
+        break;
+
+    case 2: // Polkadot
+        snprintf(outValue, outValueLen, "Polkadot");
+        break;
+    case 3: // Kusama
+        snprintf(outValue, outValueLen, "Kusama");
+        break;
+    case 4: // Westend
+        snprintf(outValue, outValueLen, "Westend");
+        break;
+    case 5: // Rococo
+        snprintf(outValue, outValueLen, "Rococo");
+        break;
+    case 6: // Wococo
+        snprintf(outValue, outValueLen, "Wococo");
+        break;
+    case 8: // BitcoinCore
+        snprintf(outValue, outValueLen, "BitcoinCore");
+        break;
+    case 9: // BitcoinCash
+        snprintf(outValue, outValueLen, "BitcoinCash");
+        break;
+    default:
+        return parser_not_supported;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringBodyIdV2(
+    const pd_BodyIdV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Unit
+        snprintf(outValue, outValueLen, "Unit");
+        break;
+    case 1: // Named
+        CHECK_ERROR(_toStringBytes(&v->named, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Index
+        CHECK_ERROR(_toStringCompactu32(&v->index, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // Executive
+        snprintf(outValue, outValueLen, "Executive");
+        break;
+    case 4: // Technical
+        snprintf(outValue, outValueLen, "Technical");
+        break;
+    case 5: // Legislative
+        snprintf(outValue, outValueLen, "Legislative");
+        break;
+    case 6: // Judicial
+        snprintf(outValue, outValueLen, "Judicial");
+        break;
+    case 7: // Defense
+        snprintf(outValue, outValueLen, "Defense");
+        break;
+    case 8: // Administration
+        snprintf(outValue, outValueLen, "Administration");
+        break;
+    case 9: // Treasury
+        snprintf(outValue, outValueLen, "Treasury");
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringBodyIdV3(
+    const pd_BodyIdV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Unit
+        snprintf(outValue, outValueLen, "Unit");
+        break;
+    case 1: // Moniker
+        GEN_DEF_TOSTRING_ARRAY(4)
+        break;
+    case 2: // Index
+        CHECK_ERROR(_toStringCompactu32(&v->index, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // Executive
+        snprintf(outValue, outValueLen, "Executive");
+        break;
+    case 4: // Technical
+        snprintf(outValue, outValueLen, "Technical");
+        break;
+    case 5: // Legislative
+        snprintf(outValue, outValueLen, "Legislative");
+        break;
+    case 6: // Judicial
+        snprintf(outValue, outValueLen, "Judicial");
+        break;
+    case 7: // Defense
+        snprintf(outValue, outValueLen, "Defense");
+        break;
+    case 8: // Administration
+        snprintf(outValue, outValueLen, "Administration");
+        break;
+    case 9: // Treasury
+        snprintf(outValue, outValueLen, "Treasury");
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringBodyPart(
+    const pd_BodyPart_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Voice
+        snprintf(outValue, outValueLen, "Voice");
+        break;
+    case 1: // Members
+        CHECK_ERROR(_toStringCompactu32(&v->count, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Fraction
+        CHECK_ERROR(_toStringFraction(&v->fraction, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // AtLeastProportion
+        CHECK_ERROR(_toStringFraction(&v->fraction, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 4: // MoreThanProportion
+        CHECK_ERROR(_toStringFraction(&v->fraction, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringNetworkIdV2(
+    const pd_NetworkIdV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Any
+        snprintf(outValue, outValueLen, "Any");
+        break;
+    case 1: // Named
+        CHECK_ERROR(_toStringBytes(&v->named, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Polkadot
+        snprintf(outValue, outValueLen, "Polkadot");
+        break;
+    case 3: // Kusama
+        snprintf(outValue, outValueLen, "Kusama");
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
 parser_error_t _toStringu8_array_20(
     const pd_u8_array_20_t* v,
     char* outValue,
@@ -348,6 +1758,1543 @@ parser_error_t _toStringu8_array_20(
     uint8_t pageIdx,
     uint8_t* pageCount) {
     GEN_DEF_TOSTRING_ARRAY(20)
+}
+
+parser_error_t _toStringAccountId32V2(
+    const pd_AccountId32V2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_32(&v->key, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_32(&v->key, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAccountId32V3(
+    const pd_AccountId32V3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_32(&v->key, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_32(&v->key, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAccountIndex64V2(
+    const pd_AccountIndex64V2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringCompactu64(&v->index, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringCompactu64(&v->index, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAccountIndex64V3(
+    const pd_AccountIndex64V3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringCompactu64(&v->index, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringCompactu64(&v->index, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAccountKey20V2(
+    const pd_AccountKey20V2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_20(&v->key, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringNetworkIdV2(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_20(&v->key, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAccountKey20V3(
+    const pd_AccountKey20V3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_20(&v->key, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringOptionNetworkIdV3(&v->networkId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_20(&v->key, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringGeneralKeyV3(
+    const pd_GeneralKeyV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringu8(&v->length, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu8_array_32(&v->data, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringu8(&v->length, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu8_array_32(&v->data, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringPluralityV2(
+    const pd_PluralityV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringBodyIdV2(&v->id, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringBodyPart(&v->part, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringBodyIdV2(&v->id, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringBodyPart(&v->part, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringPluralityV3(
+    const pd_PluralityV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringBodyIdV3(&v->id, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringBodyPart(&v->part, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringBodyIdV3(&v->id, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringBodyPart(&v->part, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2(
+    const pd_JunctionV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Parachain
+        CHECK_ERROR(_toStringCompactu32(&v->parachain, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // AccountId32
+        CHECK_ERROR(_toStringAccountId32V2(&v->accountId32, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // AccountIndex64
+        CHECK_ERROR(_toStringAccountIndex64V2(&v->accountIndex64, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // AccountKey20
+        CHECK_ERROR(_toStringAccountKey20V2(&v->accountKey20, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 4: // PalletInstance
+        CHECK_ERROR(_toStringu8(&v->palletInstance, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 5: // GeneralIndex
+        CHECK_ERROR(_toStringCompactu128(&v->generalIndex, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 6: // GeneralKey
+        CHECK_ERROR(_toStringBytes(&v->generalKey, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 7: // OnlyChild
+        snprintf(outValue, outValueLen, "OnlyChild");
+        break;
+    case 8: // Plurality
+        CHECK_ERROR(_toStringPluralityV2(&v->plurality, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringJunctionV3(
+    const pd_JunctionV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Parachain
+        CHECK_ERROR(_toStringCompactu32(&v->parachain, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // AccountId32
+        CHECK_ERROR(_toStringAccountId32V3(&v->accountId32, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // AccountIndex64
+        CHECK_ERROR(_toStringAccountIndex64V3(&v->accountIndex64, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // AccountKey20
+        CHECK_ERROR(_toStringAccountKey20V3(&v->accountKey20, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 4: // PalletInstance
+        CHECK_ERROR(_toStringu8(&v->palletInstance, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 5: // GeneralIndex
+        CHECK_ERROR(_toStringCompactu128(&v->generalIndex, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 6: // GeneralKey
+        CHECK_ERROR(_toStringGeneralKeyV3(&v->generalKey, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 7: // OnlyChild
+        snprintf(outValue, outValueLen, "OnlyChild");
+        break;
+    case 8: // Plurality
+        CHECK_ERROR(_toStringPluralityV3(&v->plurality, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 9: // GlobalConsensus
+        CHECK_ERROR(_toStringNetworkIdV3(&v->globalConsensus, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringJunctionV2X1(
+    const pd_JunctionV2X1_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[1] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction, outValue, outValueLen, 0, &pages[0]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X2(
+    const pd_JunctionV2X2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X3(
+    const pd_JunctionV2X3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[3] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X4(
+    const pd_JunctionV2X4_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[4] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X5(
+    const pd_JunctionV2X5_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[5] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X6(
+    const pd_JunctionV2X6_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[6] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X7(
+    const pd_JunctionV2X7_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[7] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction6, outValue, outValueLen, 0, &pages[6]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+    pageIdx -= pages[5];
+
+    if (pageIdx < pages[6]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction6, outValue, outValueLen, pageIdx, &pages[6]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV2X8(
+    const pd_JunctionV2X8_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[8] = { 0 };
+    CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction6, outValue, outValueLen, 0, &pages[6]))
+    CHECK_ERROR(_toStringJunctionV2(&v->junction7, outValue, outValueLen, 0, &pages[7]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+    pageIdx -= pages[5];
+
+    if (pageIdx < pages[6]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction6, outValue, outValueLen, pageIdx, &pages[6]))
+        return parser_ok;
+    }
+    pageIdx -= pages[6];
+
+    if (pageIdx < pages[7]) {
+        CHECK_ERROR(_toStringJunctionV2(&v->junction7, outValue, outValueLen, pageIdx, &pages[7]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X1(
+    const pd_JunctionV3X1_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[1] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction, outValue, outValueLen, 0, &pages[0]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X2(
+    const pd_JunctionV3X2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X3(
+    const pd_JunctionV3X3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[3] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X4(
+    const pd_JunctionV3X4_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[4] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X5(
+    const pd_JunctionV3X5_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[5] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X6(
+    const pd_JunctionV3X6_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[6] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X7(
+    const pd_JunctionV3X7_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[7] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction6, outValue, outValueLen, 0, &pages[6]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+    pageIdx -= pages[5];
+
+    if (pageIdx < pages[6]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction6, outValue, outValueLen, pageIdx, &pages[6]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionV3X8(
+    const pd_JunctionV3X8_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[8] = { 0 };
+    CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, 0, &pages[4]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, 0, &pages[5]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction6, outValue, outValueLen, 0, &pages[6]))
+    CHECK_ERROR(_toStringJunctionV3(&v->junction7, outValue, outValueLen, 0, &pages[7]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction0, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction1, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction2, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction3, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction4, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+    pageIdx -= pages[4];
+
+    if (pageIdx < pages[5]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction5, outValue, outValueLen, pageIdx, &pages[5]))
+        return parser_ok;
+    }
+    pageIdx -= pages[5];
+
+    if (pageIdx < pages[6]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction6, outValue, outValueLen, pageIdx, &pages[6]))
+        return parser_ok;
+    }
+    pageIdx -= pages[6];
+
+    if (pageIdx < pages[7]) {
+        CHECK_ERROR(_toStringJunctionV3(&v->junction7, outValue, outValueLen, pageIdx, &pages[7]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringJunctionsV2(
+    const pd_JunctionsV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Here
+        *pageCount = 1;
+        snprintf(outValue, outValueLen, "Here");
+        break;
+    case 1: // X1
+        CHECK_ERROR(_toStringJunctionV2X1(&v->x1, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // X2
+        CHECK_ERROR(_toStringJunctionV2X2(&v->x2, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // X3
+        CHECK_ERROR(_toStringJunctionV2X3(&v->x3, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 4: // X4
+        CHECK_ERROR(_toStringJunctionV2X4(&v->x4, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 5: // X5
+        CHECK_ERROR(_toStringJunctionV2X5(&v->x5, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 6: // X6
+        CHECK_ERROR(_toStringJunctionV2X6(&v->x6, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 7: // X7
+        CHECK_ERROR(_toStringJunctionV2X7(&v->x7, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 8: // X8
+        CHECK_ERROR(_toStringJunctionV2X8(&v->x8, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringJunctionsV3(
+    const pd_JunctionsV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Here
+        *pageCount = 1;
+        snprintf(outValue, outValueLen, "Here");
+        break;
+    case 1: // X1
+        CHECK_ERROR(_toStringJunctionV3X1(&v->x1, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // X2
+        CHECK_ERROR(_toStringJunctionV3X2(&v->x2, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // X3
+        CHECK_ERROR(_toStringJunctionV3X3(&v->x3, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 4: // X4
+        CHECK_ERROR(_toStringJunctionV3X4(&v->x4, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 5: // X5
+        CHECK_ERROR(_toStringJunctionV3X5(&v->x5, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 6: // X6
+        CHECK_ERROR(_toStringJunctionV3X6(&v->x6, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 7: // X7
+        CHECK_ERROR(_toStringJunctionV3X7(&v->x7, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 8: // X8
+        CHECK_ERROR(_toStringJunctionV3X8(&v->x8, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringAssetInstanceV2(
+    const pd_AssetInstanceV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Undefined
+        *pageCount = 1;
+        snprintf(outValue, outValueLen, "Undefined");
+        break;
+    case 1: // Index
+        CHECK_ERROR(_toStringCompactu128(&v->index, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Array4
+    {
+        GEN_DEF_TOSTRING_ARRAY(4)
+    }
+    case 3: // Array8
+    {
+        GEN_DEF_TOSTRING_ARRAY(8)
+    }
+    case 4: // Array16
+    {
+        GEN_DEF_TOSTRING_ARRAY(16)
+    }
+    case 5: // Array32
+    {
+        GEN_DEF_TOSTRING_ARRAY(32)
+    }
+    case 6: // Blob
+    {
+        CHECK_ERROR(_toStringBytes(&v->blob, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    }
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringAssetInstanceV3(
+    const pd_AssetInstanceV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Undefined
+        *pageCount = 1;
+        snprintf(outValue, outValueLen, "Undefined");
+        break;
+    case 1: // Index
+        CHECK_ERROR(_toStringCompactu128(&v->index, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Array4
+    {
+        GEN_DEF_TOSTRING_ARRAY(4)
+    }
+    case 3: // Array8
+    {
+        GEN_DEF_TOSTRING_ARRAY(8)
+    }
+    case 4: // Array16
+    {
+        GEN_DEF_TOSTRING_ARRAY(16)
+    }
+    case 5: // Array32
+    {
+        GEN_DEF_TOSTRING_ARRAY(32)
+    }
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringMultiLocationV2(
+    const pd_MultiLocationV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringu8(&v->parents, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionsV2(&v->interior, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringu8(&v->parents, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionsV2(&v->interior, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringMultiLocationV3(
+    const pd_MultiLocationV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringu8(&v->parents, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringJunctionsV3(&v->interior, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringu8(&v->parents, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringJunctionsV3(&v->interior, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
 }
 
 parser_error_t _toStringBalance(
@@ -384,6 +3331,269 @@ parser_error_t _toStringBalance(
     }
 
     pageString(outValue, outValueLen, bufferUI, pageIdx, pageCount);
+    return parser_ok;
+}
+
+parser_error_t _toStringFungibilityV2(
+    const pd_FungibilityV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Undefined
+        CHECK_ERROR(_toStringCompactu128(&v->fungible, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_toStringAssetInstanceV2(&v->nonFungible, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringFungibilityV3(
+    const pd_FungibilityV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Undefined
+        CHECK_ERROR(_toStringCompactu128(&v->fungible, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_toStringAssetInstanceV3(&v->nonFungible, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringMultiAssetIdV2(
+    const pd_MultiAssetIdV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Concrete
+        CHECK_ERROR(_toStringMultiLocationV2(&v->concrete, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // Abstract
+        CHECK_ERROR(_toStringBytes(&v->abstract, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringMultiAssetIdV3(
+    const pd_MultiAssetIdV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Concrete
+        CHECK_ERROR(_toStringMultiLocationV3(&v->concrete, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // Abstract
+        CHECK_ERROR(_toStringu8_array_32(&v->abstract, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringAccountId(
+    const pd_AccountId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringPubkeyAsAddress(v->_ptr, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringCompactAccountIndex(
+    const pd_CompactAccountIndex_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringCompactInt(&v->value, 0, false, "", "", outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringMintType(
+    const pd_MintType_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Issuer
+        snprintf(outValue, outValueLen, "Issuer");
+        break;
+    case 1: // Public
+        snprintf(outValue, outValueLen, "Public");
+        break;
+    case 2: // HolderOf
+        CHECK_ERROR(_toStringu32(&v->holderOf, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringMultiAssetV2(
+    const pd_MultiAssetV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringMultiAssetIdV2(&v->assetId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringFungibilityV2(&v->fungibility, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringMultiAssetIdV2(&v->assetId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringFungibilityV2(&v->fungibility, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringMultiAssetV3(
+    const pd_MultiAssetV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringMultiAssetIdV3(&v->assetId, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringFungibilityV3(&v->fungibility, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringMultiAssetIdV3(&v->assetId, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringFungibilityV3(&v->fungibility, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringPriceDirection(
+    const pd_PriceDirection_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    UNUSED(pageIdx);
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Send
+        snprintf(outValue, outValueLen, "Send");
+        break;
+    case 1: // Receive
+        snprintf(outValue, outValueLen, "Receive");
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringAccountIdLookupOfT(
+    const pd_AccountIdLookupOfT_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Id
+        CHECK_ERROR(_toStringAccountId(&v->id, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 1: // Index
+        CHECK_ERROR(_toStringCompactAccountIndex(&v->index, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 2: // Raw
+        CHECK_ERROR(_toStringBytes(&v->raw, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // Address32
+    {
+        GEN_DEF_TOSTRING_ARRAY(32)
+    }
+    case 4: // Address20
+    {
+        GEN_DEF_TOSTRING_ARRAY(20)
+    }
+    default:
+        return parser_not_supported;
+    }
+
     return parser_ok;
 }
 
@@ -467,6 +3677,502 @@ parser_error_t _toStringCall(
     return parser_display_idx_out_of_range;
 }
 
+parser_error_t _toStringChargeAssetIdOf(
+    const pd_ChargeAssetIdOf_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringu32(&v->value, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringCollectionId(
+    const pd_CollectionId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringu32(&v->value, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringCollectionSettings(
+    const pd_CollectionSettings_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringu64(&v->value, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringItemId(
+    const pd_ItemId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringu32(&v->value, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringItemPrice(
+    const pd_ItemPrice_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    CHECK_ERROR(_toStringBalance(&v->value, outValue, outValueLen, pageIdx, pageCount))
+    return parser_ok;
+}
+
+parser_error_t _toStringItemTipOfMaxTips(
+    const pd_ItemTipOfMaxTips_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[4] = { 0 };
+    CHECK_ERROR(_toStringu32(&v->collection, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu32(&v->item, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringAccountId(&v->receiver, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringBalance(&v->amount, outValue, outValueLen, 0, &pages[3]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringu32(&v->collection, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu32(&v->item, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringAccountId(&v->receiver, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringBalance(&v->amount, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringMintSettings(
+    const pd_MintSettings_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[5] = { 0 };
+    CHECK_ERROR(_toStringMintType(&v->mintType, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringOptionBalance(&v->price, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringOptionu32(&v->startBlock, outValue, outValueLen, 0, &pages[2]))
+    CHECK_ERROR(_toStringOptionu32(&v->endBlock, outValue, outValueLen, 0, &pages[3]))
+    CHECK_ERROR(_toStringu64(&v->defaultItemSettings, outValue, outValueLen, 0, &pages[4]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringMintType(&v->mintType, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringOptionBalance(&v->price, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringOptionu32(&v->startBlock, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+    pageIdx -= pages[2];
+
+    if (pageIdx < pages[3]) {
+        CHECK_ERROR(_toStringOptionu32(&v->endBlock, outValue, outValueLen, pageIdx, &pages[3]))
+        return parser_ok;
+    }
+    pageIdx -= pages[3];
+
+    if (pageIdx < pages[4]) {
+        CHECK_ERROR(_toStringu64(&v->defaultItemSettings, outValue, outValueLen, pageIdx, &pages[4]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringMintWitnessItemId(
+    const pd_MintWitnessItemId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    CHECK_ERROR(_toStringu32(&v->ownedItem, outValue, outValueLen, pageIdx, pageCount))
+    return parser_ok;
+}
+
+parser_error_t _toStringPriceWithDirectionItemPrice(
+    const pd_PriceWithDirectionItemPrice_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringBalance(&v->amount, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringPriceDirection(&v->direction, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringBalance(&v->amount, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringPriceDirection(&v->direction, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringProxyType(
+    const pd_ProxyType_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    UNUSED(pageIdx);
+
+    *pageCount = 1;
+    switch (v->value) {
+    case 0:
+        snprintf(outValue, outValueLen, "Any");
+        break;
+    case 1:
+        snprintf(outValue, outValueLen, "NonTransfer");
+        break;
+    case 2:
+        snprintf(outValue, outValueLen, "CancelProxy");
+        break;
+    case 3:
+        snprintf(outValue, outValueLen, "Assets");
+        break;
+    case 4:
+        snprintf(outValue, outValueLen, "AssetOwner");
+        break;
+    case 5:
+        snprintf(outValue, outValueLen, "AssetManager");
+        break;
+    case 6:
+        snprintf(outValue, outValueLen, "Collator");
+        break;
+    default:
+        return parser_print_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringTimepoint(
+    const pd_Timepoint_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringBlockNumber(&v->height, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringu32(&v->index, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringBlockNumber(&v->height, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringu32(&v->index, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringWeight(
+    const pd_Weight_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[2] = { 0 };
+    CHECK_ERROR(_toStringCompactu64(&v->refTime, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringCompactu64(&v->proofSize, outValue, outValueLen, 0, &pages[1]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringCompactu64(&v->refTime, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringCompactu64(&v->proofSize, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringAssetIdParameter(
+    const pd_AssetIdParameter_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    CHECK_ERROR(_toStringMultiLocationV3(&v->id, outValue, outValueLen, pageIdx, pageCount));
+    return parser_ok;
+}
+
+parser_error_t _toStringAttributeNamespaceAccountId(
+    const pd_AttributeNamespaceAccountId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    *pageCount = 1;
+    switch (v->value) {
+    case 0: // Pallet
+        snprintf(outValue, outValueLen, "Pallet");
+        break;
+    case 1: // CollectionOwner
+        snprintf(outValue, outValueLen, "CollectionOwner");
+        break;
+    case 2: // ItemOwner
+        snprintf(outValue, outValueLen, "ItemOwner");
+        break;
+    case 3: // Account
+        CHECK_ERROR(_toStringAccountId(&v->account, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringBoxVersionedMultiAssets(
+    const pd_BoxVersionedMultiAssets_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 1: // V2
+        CHECK_ERROR(_toStringVecMultiAssetV2(&v->vecMultiassetV2, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // V3
+        CHECK_ERROR(_toStringVecMultiAssetV3(&v->vecMultiassetV3, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringBoxVersionedMultiLocation(
+    const pd_BoxVersionedMultiLocation_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 1: // V2
+        CHECK_ERROR(_toStringMultiLocationV2(&v->multilocationV2, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    case 3: // V3
+        CHECK_ERROR(_toStringMultiLocationV3(&v->multilocationV3, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_not_supported;
+    }
+
+    return parser_ok;
+}
+
+parser_error_t _toStringCollectionConfigFor(
+    const pd_CollectionConfigFor_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[3] = { 0 };
+    CHECK_ERROR(_toStringCollectionSettings(&v->settings, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringOptionu32(&v->maxSupply, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringMintSettings(&v->mintSettings, outValue, outValueLen, 0, &pages[2]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringCollectionSettings(&v->settings, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringOptionu32(&v->maxSupply, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringMintSettings(&v->mintSettings, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
+parser_error_t _toStringDestroyWitness(
+    const pd_DestroyWitness_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    // First measure number of pages
+    uint8_t pages[3] = { 0 };
+    CHECK_ERROR(_toStringCompactu32(&v->accounts, outValue, outValueLen, 0, &pages[0]))
+    CHECK_ERROR(_toStringCompactu32(&v->sufficients, outValue, outValueLen, 0, &pages[1]))
+    CHECK_ERROR(_toStringCompactu32(&v->approvals, outValue, outValueLen, 0, &pages[2]))
+
+    *pageCount = 0;
+    for (uint8_t i = 0; i < (uint8_t)sizeof(pages); i++) {
+        *pageCount += pages[i];
+    }
+
+    if (pageIdx >= *pageCount) {
+        return parser_display_idx_out_of_range;
+    }
+
+    if (pageIdx < pages[0]) {
+        CHECK_ERROR(_toStringCompactu32(&v->accounts, outValue, outValueLen, pageIdx, &pages[0]))
+        return parser_ok;
+    }
+    pageIdx -= pages[0];
+
+    if (pageIdx < pages[1]) {
+        CHECK_ERROR(_toStringCompactu32(&v->sufficients, outValue, outValueLen, pageIdx, &pages[1]))
+        return parser_ok;
+    }
+    pageIdx -= pages[1];
+
+    if (pageIdx < pages[2]) {
+        CHECK_ERROR(_toStringCompactu32(&v->approvals, outValue, outValueLen, pageIdx, &pages[2]))
+        return parser_ok;
+    }
+
+    return parser_display_idx_out_of_range;
+}
+
 parser_error_t _toStringVecCall(
     const pd_VecCall_t* v,
     char* outValue,
@@ -496,7 +4202,7 @@ parser_error_t _toStringVecCall(
     ctx.tx_obj->nestCallIdx._nextPtr = NULL;
     ctx.tx_obj->nestCallIdx.isTail = true;
 
-    for (uint16_t i = 0; i < v->_len; i++) {
+    for (uint64_t i = 0; i < v->_len; i++) {
         ctx.tx_obj->nestCallIdx._ptr = NULL;
         ctx.tx_obj->nestCallIdx._nextPtr = NULL;
         ctx.tx_obj->nestCallIdx.slotIdx = 0;
@@ -507,7 +4213,7 @@ parser_error_t _toStringVecCall(
 
     /* Then iterate until we can print the corresponding chunk*/
     parser_init(&ctx, v->_ptr, v->_lenBuffer);
-    for (uint16_t i = 0; i < v->_len; i++) {
+    for (uint64_t i = 0; i < v->_len; i++) {
         ctx.tx_obj->nestCallIdx._ptr = NULL;
         ctx.tx_obj->nestCallIdx._nextPtr = NULL;
         ctx.tx_obj->nestCallIdx.slotIdx = 0;
@@ -525,6 +4231,58 @@ parser_error_t _toStringVecCall(
     }
 
     return parser_print_not_supported;
+}
+
+parser_error_t _toStringWeightLimit(
+    const pd_WeightLimit_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    switch (v->value) {
+    case 0: // Unlimited
+        *pageCount = 1;
+        snprintf(outValue, outValueLen, "Unlimited");
+        break;
+    case 1: // Limited
+        CHECK_ERROR(_toStringWeight(&v->limited, outValue, outValueLen, pageIdx, pageCount))
+        break;
+    default:
+        return parser_unexpected_value;
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringBoundedVecu8(
+    const pd_BoundedVecu8_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount) {
+    GEN_DEF_TOSTRING_VECTOR(u8)
+}
+
+parser_error_t _toStringCallHashOf(
+    const pd_CallHashOf_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount) {
+    GEN_DEF_TOSTRING_ARRAY(32)
+}
+
+parser_error_t _toStringCancelAttributesApprovalWitness(
+    const pd_CancelAttributesApprovalWitness_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+    CHECK_ERROR(_toStringu32(&v->accountAttributes, outValue, outValueLen, pageIdx, pageCount))
+    return parser_ok;
 }
 
 parser_error_t _toStringH256(
@@ -546,22 +4304,85 @@ parser_error_t _toStringHash(
     GEN_DEF_TOSTRING_ARRAY(32)
 }
 
-parser_error_t _toStringOptionChargeAssetIdOf(
-    const pd_OptionChargeAssetIdOf_t* v,
+parser_error_t _toStringItemConfig(
+    const pd_ItemConfig_t* v,
     char* outValue,
     uint16_t outValueLen,
     uint8_t pageIdx,
     uint8_t* pageCount)
 {
     CLEAN_AND_CHECK()
-
-    *pageCount = 1;
-    if (v->some == 0) {
-        snprintf(outValue, outValueLen, "0");
-        return parser_ok;
-    }
-    CHECK_ERROR(_toStringu32(&v->value, outValue, outValueLen, pageIdx, pageCount));
+    CHECK_ERROR(_toStringu64(&v->settings, outValue, outValueLen, pageIdx, pageCount))
     return parser_ok;
+}
+
+parser_error_t _toStringKeys(
+    const pd_Keys_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount) {
+    GEN_DEF_TOSTRING_ARRAY(32)
+}
+
+parser_error_t _toStringOverweightIndex(
+    const pd_OverweightIndex_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    return _toStringu64(&v->value, outValue, outValueLen, pageIdx, pageCount);
+}
+
+parser_error_t _toStringVecMultiAssetV2(
+    const pd_VecMultiAssetV2_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    GEN_DEF_TOSTRING_VECTOR(MultiAssetV2);
+}
+
+parser_error_t _toStringVecMultiAssetV3(
+    const pd_VecMultiAssetV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    GEN_DEF_TOSTRING_VECTOR(MultiAssetV3);
+}
+
+parser_error_t _toStringVecItemTipOfMaxTips(
+    const pd_VecItemTipOfMaxTips_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    GEN_DEF_TOSTRING_VECTOR(ItemTipOfMaxTips);
+}
+
+parser_error_t _toStringVecAccountId(
+    const pd_VecAccountId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    GEN_DEF_TOSTRING_VECTOR(AccountId);
+}
+
+parser_error_t _toStringVecItemId(
+    const pd_VecItemId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    GEN_DEF_TOSTRING_VECTOR(ItemId);
 }
 
 parser_error_t _toStringVecu8(
@@ -572,6 +4393,279 @@ parser_error_t _toStringVecu8(
     uint8_t* pageCount)
 {
     GEN_DEF_TOSTRING_VECTOR(u8);
+}
+
+parser_error_t _toStringOptionNetworkIdV3(
+    const pd_OptionNetworkIdV3_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringNetworkIdV3(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionBalance(
+    const pd_OptionBalance_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringBalance(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionu32(
+    const pd_Optionu32_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringu32(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionAccountIdLookupOfT(
+    const pd_OptionAccountIdLookupOfT_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringAccountIdLookupOfT(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionItemPrice(
+    const pd_OptionItemPrice_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringItemPrice(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionPriceWithDirectionItemPrice(
+    const pd_OptionPriceWithDirectionItemPrice_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringPriceWithDirectionItemPrice(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionTimepoint(
+    const pd_OptionTimepoint_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringTimepoint(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionAccountId(
+    const pd_OptionAccountId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringAccountId(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionChargeAssetIdOf(
+    const pd_OptionChargeAssetIdOf_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringChargeAssetIdOf(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionCollectionId(
+    const pd_OptionCollectionId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringCollectionId(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionItemId(
+    const pd_OptionItemId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringItemId(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionMintWitnessItemId(
+    const pd_OptionMintWitnessItemId_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringMintWitnessItemId(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
+}
+
+parser_error_t _toStringOptionProxyType(
+    const pd_OptionProxyType_t* v,
+    char* outValue,
+    uint16_t outValueLen,
+    uint8_t pageIdx,
+    uint8_t* pageCount)
+{
+    CLEAN_AND_CHECK()
+
+    *pageCount = 1;
+    if (v->some > 0) {
+        CHECK_ERROR(_toStringProxyType(
+            &v->contained,
+            outValue, outValueLen,
+            pageIdx, pageCount));
+    } else {
+        snprintf(outValue, outValueLen, "None");
+    }
+    return parser_ok;
 }
 
 ///////////////////////////////////
